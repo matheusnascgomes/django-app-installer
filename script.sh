@@ -65,21 +65,13 @@ GRANT ALL PRIVILEGES ON DATABASE $DB_NAME TO $DB_USER;
 EOF
 
 echo "⚙ Configuring Django settings..."
-SETTINGS_FILE="$PROJECT_DIR/$PROJECT_NAME/settings.py"
-sed -i "s/ALLOWED_HOSTS = \[\]/ALLOWED_HOSTS = ['$DOMAIN']/" $SETTINGS_FILE
-
-cat <<EOL >> $SETTINGS_FILE
-
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': '$DB_NAME',
-        'USER': '$DB_USER',
-        'PASSWORD': '$DB_PASS',
-        'HOST': 'localhost',
-        'PORT': '5432',
-    }
-}
+ENV_FILE="$PROJECT_DIR/.env"
+cat <<EOL > $ENV_FILE
+ENV=production
+DEBUG=False
+SECRET_KEY=$DB_PASS
+DATABASE_URL=postgres://$DB_USER:$DB_PASS@localhost:5432/$DB_NAME
+ALLOWED_HOSTS=$DOMAIN
 EOL
 
 echo "📤 Running migrations..."
