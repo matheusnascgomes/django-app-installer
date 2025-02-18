@@ -65,6 +65,8 @@ GRANT ALL PRIVILEGES ON DATABASE $DB_NAME TO $DB_USER;
 EOF
 
 echo "⚙ Configuring Django settings..."
+
+touch .env
 ENV_FILE="$PROJECT_DIR/.env"
 cat <<EOL > $ENV_FILE
 ENV=production
