@@ -1,7 +1,7 @@
 ## How to run this script
 
-curl -sSL https://raw.githubusercontent.com/matheusnascgomes/django-app-installer/refs/heads/master/script.sh | sudo bash
+bash <(curl -sL https://raw.githubusercontent.com/matheusnascgomes/django-app-installer/master/script.sh)
 
 ## Rollback command
 
-curl -sSL https://raw.githubusercontent.com/matheusnascgomes/django-app-installer/refs/heads/master/rollback.sh | sudo bash
+bash <(curl -sL https://raw.githubusercontent.com/matheusnascgomes/django-app-installer/master/rollback.sh)

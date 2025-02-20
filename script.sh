@@ -8,13 +8,14 @@ echo "----------------------------------------------"
 # Prompt user for project details
 read -p "Enter your GitHub repository URL: " GITHUB_REPO
 read -p "Enter the branch to deploy (default: main): " BRANCH
-read -p "Enteder the django project name: " PROJECT_NAME
+read -p "Enter the django project name: " PROJECT_NAME
 BRANCH=${BRANCH:-main}
 
 # Extract project name from repository URL
-PROJECT_DIR="/root/$PROJECT_NAME"
+PROJECT_DIR="/opt/$PROJECT_NAME"
 VENV_DIR="$PROJECT_DIR/venv"
 GUNICORN_SERVICE="/etc/systemd/system/gunicorn.service"
+SOCKET_FILE="$PROJECT_DIR/$PROJECT_NAME.sock"
 
 # Prompt user for domain/IP
 read -p "Enter your domain or server IP: " DOMAIN
@@ -40,6 +41,8 @@ if [ -d "$PROJECT_DIR" ]; then
     cd $PROJECT_DIR
     git pull origin $BRANCH
 else
+    sudo mkdir -p $PROJECT_DIR
+    sudo chown $USER:$USER $PROJECT_DIR
     git clone -b $BRANCH $GITHUB_REPO $PROJECT_DIR
 fi
 cd $PROJECT_DIR
@@ -61,7 +64,6 @@ ALTER ROLE $DB_USER SET default_transaction_isolation TO 'read committed';
 ALTER ROLE $DB_USER SET timezone TO 'UTC';
 GRANT ALL PRIVILEGES ON SCHEMA public TO $DB_USER;
 GRANT ALL PRIVILEGES ON DATABASE $DB_NAME TO $DB_USER;
-
 EOF
 
 echo "⚙ Configuring Django settings..."
@@ -89,18 +91,22 @@ Description=Gunicorn instance to serve Django application
 After=network.target
 
 [Service]
-User=root
+User=www-data
 Group=www-data
 WorkingDirectory=$PROJECT_DIR
-ExecStart=$VENV_DIR/bin/gunicorn --workers 3 --bind unix:$PROJECT_DIR/$PROJECT_NAME.sock $PROJECT_NAME.wsgi:application
+ExecStart=$VENV_DIR/bin/gunicorn --workers 3 --bind unix:$SOCKET_FILE --umask 007 $PROJECT_NAME.wsgi:application
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
+echo "🔧 Setting correct permissions for Gunicorn socket..."
+sudo chown -R www-data:www-data $PROJECT_DIR
+sudo chmod -R 750 $PROJECT_DIR
+
 echo "🚀 Enabling and starting Gunicorn..."
 sudo systemctl daemon-reload
-sudo systemctl start gunicorn
+sudo systemctl restart gunicorn
 sudo systemctl enable gunicorn
 
 echo "🌐 Setting up Nginx reverse proxy..."
@@ -112,7 +118,7 @@ server {
 
     location / {
         include proxy_params;
-        proxy_pass http://unix:$PROJECT_DIR/$PROJECT_NAME.sock;
+        proxy_pass http://unix:$SOCKET_FILE;
     }
 }
 EOF
