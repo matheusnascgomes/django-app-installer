@@ -1,48 +1,59 @@
 #!/bin/bash
 
-set +e  # Continue script on error
+set -e  # Para execução se algum comando falhar
 
-echo "🚀 Starting rollback process..."
-echo "--------------------------------"
+echo "⚠️  Iniciando rollback completo da aplicação Django..."
 
-# Prompt user for project details
-read -p "Enter the django project name: " PROJECT_NAME
+# Solicita a confirmação do usuário antes de continuar
+read -p "Tem certeza que deseja remover completamente a aplicação? (yes/no): " CONFIRM
+if [[ "$CONFIRM" != "yes" ]]; then
+    echo "❌ Rollback cancelado."
+    exit 1
+fi
+
+# Solicita detalhes do projeto
+read -p "Informe o nome do projeto Django: " PROJECT_NAME
+read -p "Informe o domínio usado no Nginx: " DOMAIN
+read -p "Informe o nome do banco de dados PostgreSQL: " DB_NAME
+read -p "Informe o nome do usuário do banco de dados PostgreSQL: " DB_USER
+
 PROJECT_DIR="/root/$PROJECT_NAME"
-VENV_DIR="$PROJECT_DIR/venv"
 GUNICORN_SERVICE="/etc/systemd/system/gunicorn.service"
 NGINX_CONFIG="/etc/nginx/sites-available/$PROJECT_NAME"
+NGINX_ENABLED="/etc/nginx/sites-enabled/$PROJECT_NAME"
 
-# Prompt user for domain/IP
-read -p "Enter your domain or server IP: " DOMAIN
-
-echo "🛑 Stopping Gunicorn service..."
+echo "🛑 Parando serviços..."
 sudo systemctl stop gunicorn || true
 sudo systemctl disable gunicorn || true
-
-echo "🗑 Removing Gunicorn systemd service file..."
-sudo rm -f $GUNICORN_SERVICE || true
-sudo systemctl daemon-reload || true
-
-echo "🛑 Stopping Nginx service..."
 sudo systemctl stop nginx || true
 
-echo "🗑 Removing Nginx site configuration..."
-sudo rm -f $NGINX_CONFIG || true
-sudo rm -f /etc/nginx/sites-enabled/$PROJECT_NAME || true
-sudo nginx -t || true
+echo "🗑 Removendo serviço Gunicorn..."
+sudo rm -f "$GUNICORN_SERVICE"
+sudo systemctl daemon-reload
 
-echo "🗑 Removing SSL certificate..."
-sudo certbot delete --cert-name $DOMAIN || true
+echo "🗑 Removendo configuração do Nginx..."
+sudo rm -f "$NGINX_CONFIG"
+sudo rm -f "$NGINX_ENABLED"
+sudo nginx -t
+sudo systemctl restart nginx
 
-echo "🗑 Removing project directory..."
-sudo rm -rf $PROJECT_DIR || true
+echo "🛑 Removendo certificados SSL (Let's Encrypt)..."
+sudo certbot revoke --cert-name "$DOMAIN" --delete-after-revoke || true
+sudo rm -rf /etc/letsencrypt/live/"$DOMAIN"
+sudo rm -rf /etc/letsencrypt/archive/"$DOMAIN"
+sudo rm -rf /etc/letsencrypt/renewal/"$DOMAIN".conf
 
-echo "🗑 Dropping PostgreSQL database and user..."
-read -p "Enter PostgreSQL database name: " DB_NAME
-read -p "Enter PostgreSQL database username: " DB_USER
-sudo -u postgres psql <<EOF || true
+echo "🗑 Removendo diretório do projeto..."
+sudo rm -rf "$PROJECT_DIR"
+
+echo "🗄 Removendo banco de dados e usuário PostgreSQL..."
+sudo -u postgres psql <<EOF
 DROP DATABASE IF EXISTS $DB_NAME;
 DROP USER IF EXISTS $DB_USER;
 EOF
 
-echo "✅ Rollback complete!"
+echo "📦 Removendo pacotes desnecessários..."
+sudo apt remove -y nginx postgresql python3-pip python3-venv certbot python3-certbot-nginx
+sudo apt autoremove -y
+
+echo "✅ Rollback completo! O servidor foi limpo com sucesso."
